@@ -1,0 +1,172 @@
+;Elec 317 Final Project in Koç University
+;Altuğ Somay
+
+.include"m32def.inc"
+.CSEG 
+rjmp main
+.org ADCCaddr	;ADC Interrupt, when ADC finished converting it goes to ADCPART 
+	rjmp ADCPART
+.org 40
+ldi r20, 0
+
+.def sifir = r18	; "sifir" is our left sensor depending on switch
+.def bir = r19		; "bir" is our right sensor depending on switch
+
+
+.def temp =r22 ; temporary variables
+.def temp2 =r23
+.def temp3 =r24
+.def switch= r25	;switch register
+.def limit = r17	; our value that the difference of the sensors mussst exceed to go right or left
+main:
+
+ldi r16, high(ramend)	;stack pointer
+out sph, r16
+ldi r16, low(ramend)
+out spl, r16
+sei
+	ldi r16, 0xFF	;port B output
+	out DDRB, r16
+
+	ldi r16, 0x00	;port A input
+	out DDRA, r16
+
+	ldi r16, 0xFF	;port D output
+	out DDRD,r16
+
+	ldi r16, 0xFF	;port C output
+	out DDRC, r16
+
+	ldi r16, 0b01100000	;converter with 5v reference, left adjusted, for input PA0
+	out ADMUX, r16
+	ldi r16, 0b10001101	; ADC enabled, divison factor by 32, adie enabled(interrupt)
+	out ADCSRA, r16
+	sbi ADCSRA, ADSC	;start conversion by setting ADSC bit
+
+	in switch, pinA	
+	lsr switch
+	lsr switch
+	lsr switch
+	lsr switch
+
+cpi switch, 0 ;if switch is 1 execute foto, if 0 execute sound
+breq sound
+ldi limit, 30	;limit for photoresistors
+jmp compute
+sound:
+ldi limit, 3	;limit for microfones
+	
+
+	compute:		;same computation for both cases because depending on our switch value "sifir" and "bir" registers take the value from photoresistors or microfones
+	cp sifir, bir
+	brlo goright	;if right sensor value is bigger go "goright"
+	rjmp goleft		;else go "goleft"
+	
+	goright:
+	sub bir, sifir	;substracting smaller value from bigger value
+	cp bir, limit	;comparing the result with limit
+	brsh right		;if the result exceeds the limit car goes right
+	rjmp forward	;else it goes forward because the signal is between the sensors
+
+	goleft:
+	sub sifir, bir
+	cp sifir, limit
+	brsh left
+	rjmp forward
+	
+	
+	LEFT:			;as we used "l293d" motor driver we implemented the functions to go left, right and forward
+	ldi r16, 0b10000001	;to go left, left tire goes back and right tire goes forward
+	out PortC, r16
+	rcall longer_delay	;turns left for a specified time
+	ldi r16, 0		;then stops the motor again
+	out PortC, r16
+	
+	rjmp compute
+	
+	RIGHT:
+	ldi r16, 0b01000010
+	out PortC, r16
+	rcall longer_delay
+	ldi r16, 0
+	out PortC, r16
+	
+	rjmp compute
+
+	FORWARD:
+	ldi r16, 0b01000001
+	out PORTC, r16
+	rcall long_delay
+	ldi r16, 0
+	out PortC, r16
+	
+	rjmp compute
+	
+
+delay: ldi temp,$FF ; load immediate 
+d1: dec temp ; decrement 
+brne d1 ; branch on not equal 
+ret ; return
+
+long_delay: 
+ldi temp2, 0x8F ; load $FF
+ld1: rcall delay ; call 
+dec temp2 ; decrement temp2 
+brne ld1 ; branch on not equal 
+ret ; return 
+longer_delay:
+ldi temp3, 0x05
+ld2:rcall long_delay
+dec temp3
+brne ld2
+ret
+
+
+	ADCPART:	;Interrupt for ADC
+	cpi switch, 0	;The switch value 
+	breq soundinter
+					;light part
+	cpse r20, r21	;checking control register, this register is switching between the right and left sensor
+	jmp onepart		
+	in R16, ADCL	
+	in r16, ADCH	;taking the high value as we left adjusted
+	out PORTB, R16
+	mov sifir, r16	;saving the value
+	sbi ADCSRA, ADSC ;setting bit to make convertion again
+	ldi r16, 0b01100001	;giving the admux another value to take the second sensor value when interrupt happens
+	out ADMUX, r16
+	inc r20	;incrementing control register
+	reti
+	onepart:		;second sensor part
+	in R16, ADCL
+	in r16, ADCH
+	out PORTD, R16
+	mov bir, r16
+	sbi ADCSRA, ADSC
+	ldi r16, 0b01100000
+	out ADMUX, r16
+	dec r20		;decrementing the control register to take value from first sesor next time
+	reti
+
+	soundinter:
+	cpse r20, r21	;checking control register
+	jmp oneparts		
+	in R16, ADCL	
+	in r16, ADCH
+	out PORTB, R16
+	mov sifir, r16
+	sbi ADCSRA, ADSC
+	ldi r16, 0b01100011
+	out ADMUX, r16
+	inc r20
+	reti
+	oneparts:		
+	in R16, ADCL
+	in r16, ADCH
+	out PORTD, R16
+	mov bir, r16
+	sbi ADCSRA, ADSC
+	ldi r16, 0b01100010
+	out ADMUX, r16
+	dec r20
+	reti
