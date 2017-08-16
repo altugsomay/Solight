@@ -1,5 +1,5 @@
 ;Elec 317 Final Project in Koç University
-;Altuğ Somay
+;by Altuğ Somay
 
 .include"m32def.inc"
 .CSEG 
