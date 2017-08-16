@@ -54,7 +54,7 @@ breq sound
 ldi limit, 30	;limit for photoresistors
 jmp compute
 sound:
-ldi limit, 3	;limit for microfones
+ldi limit, 3	;limit for microphones
 	
 
 	compute:		;same computation for both cases because depending on our switch value "sifir" and "bir" registers take the value from photoresistors or microfones
